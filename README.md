@@ -4,6 +4,8 @@
 
 **[Открыть BinaryKit](https://ihowi2.github.io/TestSite/BinaryKit.html)**
 
+> GitHub Pages развёрнут автоматически через GitHub Actions. Любой push в `main` обновляет сайт.
+
 ## Возможности
 
 - **File Inspector** — определение формата по magic bytes, энтропия Шеннона с графиком, извлечение ASCII-строк
