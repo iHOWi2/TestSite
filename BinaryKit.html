@@ -1,0 +1,1740 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BinaryKit — Binary Analysis Toolkit</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-tertiary: #21262d;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-secondary: #8b949e;
+    --accent: #58a6ff;
+    --accent-hover: #79b8ff;
+    --red: #f85149;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --purple: #a371f7;
+    --orange: #f0883e;
+    --sidebar-width: 220px;
+    --ai-width: 320px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow: hidden;
+  }
+  #app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    width: var(--sidebar-width);
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  #sidebar .logo {
+    padding: 16px;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #sidebar .nav {
+    flex: 1;
+    overflow-y: auto;
+  }
+  #sidebar .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: background .15s;
+    color: var(--text-secondary);
+    user-select: none;
+  }
+  #sidebar .nav-item:hover { background: var(--bg-tertiary); color: var(--text); }
+  #sidebar .nav-item.active { background: var(--bg-tertiary); color: var(--accent); border-left-color: var(--accent); }
+  #sidebar .nav-item .icon { width: 20px; text-align: center; font-size: 14px; }
+
+  /* Main */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-right: var(--ai-width);
+    transition: margin-right .2s;
+  }
+  #main.ai-hidden { margin-right: 0; }
+
+  /* Drop zone */
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    margin: 12px 16px 0;
+    padding: 20px;
+    text-align: center;
+    color: var(--text-secondary);
+    transition: border-color .2s, background .2s;
+    cursor: pointer;
+    position: relative;
+  }
+  #dropzone.dragover { border-color: var(--accent); background: rgba(88,166,255,0.08); }
+  #dropzone .file-info { margin-top: 8px; font-size: 12px; color: var(--text); }
+  #dropzone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+  /* Content */
+  #content {
+    flex: 1;
+    overflow: auto;
+    padding: 12px 16px 16px;
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* AI Panel */
+  #ai-panel {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--ai-width);
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+    transition: transform .2s;
+  }
+  #ai-panel.hidden { transform: translateX(100%); }
+  #ai-header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  #ai-header .title { font-weight: 700; color: var(--accent); }
+  #ai-header .actions { display: flex; gap: 6px; }
+  .btn-icon {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  .btn-icon:hover { color: var(--text); border-color: var(--text-secondary); }
+  #ai-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .msg { display: flex; gap: 8px; }
+  .msg .avatar { flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; background: var(--bg-tertiary); }
+  .msg.user .avatar { background: var(--accent); color: #fff; }
+  .msg.bot .avatar { background: var(--green); color: #fff; }
+  .msg .bubble {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    max-width: 100%;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
+  .msg.user .bubble { background: rgba(88,166,255,0.12); border-color: rgba(88,166,255,0.3); }
+  .msg .bubble code {
+    background: var(--bg);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+    color: var(--orange);
+  }
+  .msg .bubble pre {
+    background: var(--bg);
+    padding: 8px;
+    border-radius: 4px;
+    overflow-x: auto;
+    margin: 6px 0;
+    font-size: 12px;
+    border: 1px solid var(--border);
+  }
+  .msg .bubble pre code { background: transparent; padding: 0; color: var(--text); }
+  .msg .bubble ul, .msg .bubble ol { margin: 4px 0 4px 18px; }
+  .msg .bubble strong { color: var(--accent-hover); }
+  #ai-input-area {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  #ai-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    resize: none;
+    height: 60px;
+    outline: none;
+  }
+  #ai-input:focus { border-color: var(--accent); }
+  .ai-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ai-tools .btn-icon { font-size: 11px; padding: 3px 6px; }
+  #ai-status { font-size: 11px; color: var(--text-secondary); min-height: 16px; }
+
+  /* Mobile AI toggle */
+  #ai-toggle {
+    display: none;
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 30;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  @media (max-width: 900px) {
+    #main { margin-right: 0 !important; }
+    #ai-panel { transform: translateX(100%); }
+    #ai-panel.visible { transform: translateX(0); }
+    #ai-toggle { display: flex; align-items: center; justify-content: center; }
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    width: 420px;
+    max-width: 90vw;
+  }
+  .modal h3 { margin-bottom: 12px; color: var(--accent); }
+  .modal p { margin-bottom: 12px; color: var(--text-secondary); font-size: 12px; }
+  .modal input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: var(--text);
+    font-family: inherit;
+    margin-bottom: 12px;
+    outline: none;
+  }
+  .modal input:focus { border-color: var(--accent); }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:hover { opacity: 0.9; }
+
+  /* Tables & cards */
+  .card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+  .card h4 { color: var(--accent); margin-bottom: 8px; font-size: 13px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th, td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+  th { color: var(--text-secondary); font-weight: 500; }
+  tr:hover td { background: rgba(255,255,255,0.03); }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .hex { color: var(--orange); }
+  .num { color: var(--purple); }
+  .str { color: var(--green); }
+  .addr { color: var(--yellow); }
+  .err { color: var(--red); }
+  .label { color: var(--text-secondary); font-size: 11px; margin-bottom: 4px; }
+  .value { font-size: 13px; word-break: break-all; }
+
+  /* Hex viewer */
+  #hex-container {
+    position: relative;
+    height: calc(100vh - 220px);
+    min-height: 300px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: auto;
+  }
+  #hex-viewport { position: relative; }
+  .hex-row {
+    display: flex;
+    font-size: 13px;
+    line-height: 22px;
+    padding: 0 10px;
+    white-space: pre;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .hex-row:hover { background: rgba(88,166,255,0.08); }
+  .hex-row .offset { width: 80px; color: var(--text-secondary); flex-shrink: 0; user-select: none; }
+  .hex-row .bytes { width: 340px; flex-shrink: 0; }
+  .hex-row .ascii { color: var(--text-secondary); flex-shrink: 0; }
+  .hex-row .byte { display: inline-block; width: 20px; text-align: center; cursor: pointer; }
+  .hex-row .byte:hover { background: var(--accent); color: #fff; border-radius: 2px; }
+  .hex-row .byte.selected { background: var(--accent); color: #fff; border-radius: 2px; }
+
+  /* Search bar */
+  .search-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .search-bar input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 10px;
+    color: var(--text);
+    font-family: inherit;
+    outline: none;
+  }
+  .search-bar input:focus { border-color: var(--accent); }
+
+  /* Syntax highlight */
+  .asm-jmp { color: var(--red); }
+  .asm-mov { color: var(--green); }
+  .asm-push { color: var(--accent); }
+  .asm-pop { color: var(--accent); }
+  .asm-call { color: var(--red); font-weight: 700; }
+  .asm-ret { color: var(--purple); }
+  .asm-addr { color: var(--yellow); }
+  .asm-bytes { color: var(--text-secondary); }
+  .asm-mnem { color: var(--orange); }
+
+  /* Entropy canvas */
+  #entropy-canvas { width: 100%; height: 120px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+
+  /* Loading */
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    padding: 20px;
+  }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+  /* Utility */
+  .flex { display: flex; gap: 10px; }
+  .flex-col { flex-direction: column; }
+  .gap-4 { gap: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mb-8 { margin-bottom: 8px; }
+  .text-sm { font-size: 11px; }
+  .text-xs { font-size: 10px; }
+  .w-full { width: 100%; }
+  .hidden { display: none !important; }
+  .pre-wrap { white-space: pre-wrap; word-break: break-word; }
+  .output-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    max-height: 400px;
+    overflow: auto;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  select, textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+  }
+  select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; width: 100%; min-height: 80px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <aside id="sidebar">
+    <div class="logo">BinaryKit</div>
+    <nav class="nav" id="nav">
+      <div class="nav-item active" data-tab="inspector"><span class="icon">📁</span>File Inspector</div>
+      <div class="nav-item" data-tab="hex"><span class="icon">🔢</span>Hex Viewer</div>
+      <div class="nav-item" data-tab="disasm"><span class="icon">🔍</span>Disassembler</div>
+      <div class="nav-item" data-tab="wasm"><span class="icon">🕸️</span>WASM Tools</div>
+      <div class="nav-item" data-tab="peelf"><span class="icon">📦</span>PE / ELF</div>
+      <div class="nav-item" data-tab="convert"><span class="icon">🔄</span>Converter</div>
+      <div class="nav-item" data-tab="hash"><span class="icon">#️⃣</span>Hash & Compress</div>
+    </nav>
+  </aside>
+
+  <main id="main">
+    <div id="dropzone">
+      <input type="file" id="fileInput" />
+      <div>📂 Перетащите файл сюда или кликните для выбора</div>
+      <div class="file-info" id="fileInfo">Файл не загружен</div>
+    </div>
+
+    <div id="content">
+      <!-- FILE INSPECTOR -->
+      <div class="tab-panel active" id="tab-inspector">
+        <div class="card"><h4>📋 Общая информация</h4>
+          <div id="insp-info">Загрузите файл для анализа</div>
+        </div>
+        <div class="card"><h4>🔮 Magic Bytes / Формат</h4>
+          <div id="insp-magic">—</div>
+        </div>
+        <div class="card"><h4>📊 Энтропия Шеннона</h4>
+          <canvas id="entropy-canvas"></canvas>
+          <div class="mt-8" id="insp-entropy">—</div>
+        </div>
+        <div class="card"><h4>🔤 ASCII Strings</h4>
+          <div class="search-bar"><input type="text" id="str-filter" placeholder="Фильтр строк..." /></div>
+          <div class="output-box" id="insp-strings">—</div>
+        </div>
+        <div class="card"><h4>🧪 Первые 256 байт (hex)</h4>
+          <div class="output-box mono" id="insp-hex">—</div>
+        </div>
+      </div>
+
+      <!-- HEX VIEWER -->
+      <div class="tab-panel" id="tab-hex">
+        <div class="search-bar">
+          <input type="text" id="hex-search" placeholder="Поиск hex-паттерна (например: 48 89 e5)" />
+          <button class="btn" onclick="hexSearch()">🔍 Найти</button>
+          <button class="btn" onclick="hexSearchNext()">⬇️ Далее</button>
+        </div>
+        <div id="hex-container"><div id="hex-viewport"></div></div>
+        <div class="mt-8 flex gap-4">
+          <div id="hex-detail" style="flex:1">Кликните по байту для деталей</div>
+        </div>
+      </div>
+
+      <!-- DISASSEMBLER -->
+      <div class="tab-panel" id="tab-disasm">
+        <div class="card">
+          <div class="flex gap-4">
+            <select id="dis-arch">
+              <option value="x86-64">x86-64</option>
+              <option value="x86-32">x86-32</option>
+              <option value="x86-16">x86-16</option>
+              <option value="arm">ARM32</option>
+              <option value="thumb">ARM Thumb</option>
+              <option value="arm64">ARM64</option>
+              <option value="mips">MIPS</option>
+            </select>
+            <input type="text" id="dis-addr" value="0x1000" placeholder="Base address" style="width:120px" />
+            <input type="text" id="dis-count" value="500" placeholder="Instr count" style="width:100px" />
+            <button class="btn primary" onclick="runDisasm()">▶️ Дизассемблировать</button>
+          </div>
+        </div>
+        <div id="disasm-loading" class="loading hidden"><div class="spinner"></div><span>Загрузка Capstone.js...</span></div>
+        <div class="output-box mono" id="disasm-output" style="max-height: calc(100vh - 300px);">Выберите параметры и нажмите кнопку</div>
+      </div>
+
+      <!-- WASM TOOLS -->
+      <div class="tab-panel" id="tab-wasm">
+        <div class="card">
+          <div class="flex gap-4">
+            <select id="wasm-mode">
+              <option value="wat">WAT (Text)</option>
+              <option value="decomp">C-like псевдокод</option>
+              <option value="meta">Секции / метаданные</option>
+            </select>
+            <button class="btn primary" onclick="runWasm()">▶️ Обработать</button>
+            <button class="btn" onclick="downloadWasmResult()">⬇️ Скачать</button>
+          </div>
+        </div>
+        <div id="wasm-loading" class="loading hidden"><div class="spinner"></div><span>Загрузка wabt.js...</span></div>
+        <div class="output-box mono" id="wasm-output" style="max-height: calc(100vh - 300px);">Загрузите WASM файл и нажмите кнопку</div>
+      </div>
+
+      <!-- PE / ELF -->
+      <div class="tab-panel" id="tab-peelf">
+        <div id="peelf-loading" class="loading hidden"><div class="spinner"></div><span>Анализ...</span></div>
+        <div id="peelf-output">Загрузите PE или ELF файл</div>
+      </div>
+
+      <!-- CONVERTER -->
+      <div class="tab-panel" id="tab-convert">
+        <div class="card">
+          <h4>📄 Файл → Данные</h4>
+          <div class="flex gap-4 mt-8">
+            <select id="conv-file-mode">
+              <option value="base64">Base64</option>
+              <option value="hex">Hex string</option>
+              <option value="c">C byte array</option>
+              <option value="py">Python bytes</option>
+              <option value="js">JS Uint8Array</option>
+              <option value="rust">Rust Vec</option>
+            </select>
+            <button class="btn primary" onclick="convertFile()">▶️ Конвертировать</button>
+            <button class="btn" onclick="downloadConverted()">⬇️ Скачать текст</button>
+          </div>
+          <textarea class="mt-8" id="conv-file-out" readonly placeholder="Результат..."></textarea>
+        </div>
+        <div class="card">
+          <h4>🔄 Base64 → Файл</h4>
+          <textarea id="conv-b64-in" placeholder="Вставьте Base64..."></textarea>
+          <div class="mt-8"><button class="btn primary" onclick="base64ToFile()">▶️ Декодировать и скачать</button></div>
+        </div>
+        <div class="card">
+          <h4>🔢 Числовой конвертер</h4>
+          <div class="grid-2">
+            <div>
+              <div class="label">Decimal</div>
+              <input type="text" id="num-dec" oninput="numConvert('dec')" />
+            </div>
+            <div>
+              <div class="label">Hex</div>
+              <input type="text" id="num-hex" oninput="numConvert('hex')" />
+            </div>
+            <div>
+              <div class="label">Octal</div>
+              <input type="text" id="num-oct" oninput="numConvert('oct')" />
+            </div>
+            <div>
+              <div class="label">Binary</div>
+              <input type="text" id="num-bin" oninput="numConvert('bin')" />
+            </div>
+          </div>
+          <div class="flex gap-4 mt-8">
+            <select id="num-bits"><option value="8">8 bit</option><option value="16">16 bit</option><option value="32" selected>32 bit</option><option value="64">64 bit</option></select>
+            <select id="num-endian"><option value="le">Little Endian</option><option value="be">Big Endian</option></select>
+            <select id="num-sign"><option value="unsigned">Unsigned</option><option value="signed">Signed</option></select>
+          </div>
+        </div>
+        <div class="card">
+          <h4>🔤 Строковый конвертер</h4>
+          <div class="label">Input</div>
+          <textarea id="str-in" oninput="strConvert()"></textarea>
+          <div class="flex gap-4 mt-8">
+            <select id="str-from"><option value="utf8">UTF-8</option><option value="utf16">UTF-16</option><option value="latin1">Latin-1</option></select>
+            <span>→</span>
+            <select id="str-to"><option value="utf8">UTF-8</option><option value="utf16">UTF-16</option><option value="latin1">Latin-1</option></select>
+          </div>
+          <div class="label mt-8">Output</div>
+          <textarea id="str-out" readonly></textarea>
+        </div>
+      </div>
+
+      <!-- HASH & COMPRESS -->
+      <div class="tab-panel" id="tab-hash">
+        <div class="card">
+          <h4>#️⃣ Хеши</h4>
+          <div class="flex gap-4 mt-8">
+            <button class="btn primary" onclick="calcHashes()">▶️ Вычислить хеши</button>
+          </div>
+          <div class="mt-8" id="hash-results">—</div>
+        </div>
+        <div class="card">
+          <h4>🗜️ Сжатие</h4>
+          <div class="flex gap-4 mt-8">
+            <select id="compress-format">
+              <option value="gzip">gzip</option>
+              <option value="deflate">deflate</option>
+            </select>
+            <button class="btn primary" onclick="compressFile()">▶️ Сжать</button>
+            <button class="btn" onclick="decompressFile()">▶️ Распаковать</button>
+          </div>
+          <div class="mt-8" id="compress-results">—</div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- AI Panel -->
+  <aside id="ai-panel">
+    <div id="ai-header">
+      <span class="title">🤖 BinaryKit AI</span>
+      <div class="actions">
+        <button class="btn-icon" onclick="showApiKeyModal()" title="Сменить ключ">⚙️</button>
+        <button class="btn-icon" onclick="clearChat()" title="Очистить чат">🗑️</button>
+        <button class="btn-icon" onclick="toggleAiPanel()" title="Скрыть">✕</button>
+      </div>
+    </div>
+    <div id="ai-messages"></div>
+    <div id="ai-input-area">
+      <div class="ai-tools">
+        <button class="btn-icon" onclick="pasteToolOutput()">📋 Вставить вывод</button>
+        <button class="btn-icon" onclick="pasteErrors()">⚠️ Вставить ошибки</button>
+      </div>
+      <textarea id="ai-input" placeholder="Спросите AI об этом бинарном файле..."></textarea>
+      <button class="btn primary w-full" onclick="sendAiMessage()">➤ Отправить</button>
+      <div id="ai-status"></div>
+    </div>
+  </aside>
+
+  <button id="ai-toggle" onclick="toggleAiPanel()">🤖</button>
+</div>
+
+<!-- API Key Modal -->
+<div class="modal-overlay" id="api-modal" style="display:none">
+  <div class="modal">
+    <h3>🔑 Fireworks API Key</h3>
+    <p>Введите ваш API ключ от <a href="https://fireworks.ai" target="_blank" style="color:var(--accent)">fireworks.ai</a> (бесплатная регистрация). Ключ сохраняется локально в браузере.</p>
+    <input type="password" id="api-key-input" placeholder="fw_..." />
+    <div class="actions">
+      <button class="btn" onclick="closeApiModal()">Отмена</button>
+      <button class="btn primary" onclick="saveApiKey()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// ERROR INTERCEPT — MUST BE FIRST
+// ═══════════════════════════════════════════════════════════════
+const _errors = [];
+window.onerror = (msg, src, line) => {
+  _errors.push({t: Date.now(), msg, src, line});
+  if (_errors.length > 20) _errors.shift();
+};
+const _origErr = console.error;
+console.error = (...a) => {
+  _errors.push({t: Date.now(), msg: a.join(' ')});
+  if (_errors.length > 20) _errors.shift();
+  _origErr(...a);
+};
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+let currentFile = null; // {name, size, bytes: Uint8Array}
+let currentTab = 'inspector';
+let capstoneLoaded = false;
+let wabtLoaded = false;
+let capstoneInstance = null;
+let wabtInstance = null;
+let wasmResultText = '';
+let convertedText = '';
+let chatHistory = [];
+let aiAbort = null;
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════
+function buf2hex(buf, sep=' ') {
+  return Array.from(buf).map(b => b.toString(16).padStart(2,'0')).join(sep);
+}
+function hex2bytes(str) {
+  const s = str.replace(/\s+/g,'');
+  const arr = [];
+  for (let i=0;i<s.length;i+=2) arr.push(parseInt(s.substr(i,2),16));
+  return new Uint8Array(arr);
+}
+function formatSize(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(2) + ' KB';
+  return (n/(1024*1024)).toFixed(2) + ' MB';
+}
+function shannonEntropy(bytes) {
+  const freq = new Array(256).fill(0);
+  for (const b of bytes) freq[b]++;
+  let ent = 0;
+  const len = bytes.length;
+  for (let i=0;i<256;i++) {
+    if (freq[i] === 0) continue;
+    const p = freq[i]/len;
+    ent -= p * Math.log2(p);
+  }
+  return ent;
+}
+function entropyBlocks(bytes, blockSize=256) {
+  const blocks = [];
+  for (let i=0;i<bytes.length;i+=blockSize) {
+    const chunk = bytes.slice(i, i+blockSize);
+    blocks.push(shannonEntropy(chunk));
+  }
+  return blocks;
+}
+function extractStrings(bytes, minLen=4) {
+  const strings = [];
+  let s = '';
+  let start = 0;
+  for (let i=0;i<bytes.length;i++) {
+    const c = bytes[i];
+    if (c >= 32 && c < 127) {
+      if (s.length === 0) start = i;
+      s += String.fromCharCode(c);
+    } else {
+      if (s.length >= minLen) strings.push({offset: start, str: s});
+      s = '';
+    }
+  }
+  if (s.length >= minLen) strings.push({offset: start, str: s});
+  return strings;
+}
+function detectFormat(bytes) {
+  if (bytes.length < 4) return 'Unknown';
+  const m = (bytes[0]<<24|bytes[1]<<16|bytes[2]<<8|bytes[3])>>>0;
+  if (bytes[0]===0x7f && bytes[1]===0x45 && bytes[2]===0x4c && bytes[3]===0x46) return 'ELF';
+  if (bytes[0]===0x4d && bytes[1]===0x5a) return 'PE/EXE';
+  if (bytes[0]===0x00 && bytes[1]===0x61 && bytes[2]===0x73 && bytes[3]===0x6d) return 'WASM';
+  if (bytes[0]===0x50 && bytes[1]===0x4b && bytes[2]===0x03 && bytes[3]===0x04) return 'ZIP';
+  if (bytes[0]===0x1f && bytes[1]===0x8b) return 'GZIP';
+  if (bytes[0]===0x89 && bytes[1]===0x50 && bytes[2]===0x4e && bytes[3]===0x47) return 'PNG';
+  if (bytes[0]===0x25 && bytes[1]===0x50 && bytes[2]===0x44 && bytes[3]===0x46) return 'PDF';
+  if (bytes[0]===0xca && bytes[1]===0xfe && bytes[2]===0xba && bytes[3]===0xbe) return 'Java class / Mach-O universal';
+  if (bytes[0]===0xfe && bytes[1]===0xed && bytes[2]===0xfa && bytes[3]===0xcf) return 'Mach-O 32-bit';
+  if (bytes[0]===0xcf && bytes[1]===0xfa && bytes[2]===0xed && bytes[3]===0xfe) return 'Mach-O 64-bit';
+  return 'Unknown / Raw binary';
+}
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+// ═══════════════════════════════════════════════════════════════
+// FILE LOADING
+// ═══════════════════════════════════════════════════════════════
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) loadFile(e.target.files[0]); });
+
+async function loadFile(file) {
+  const buf = await file.arrayBuffer();
+  currentFile = { name: file.name, size: file.size, bytes: new Uint8Array(buf) };
+  fileInfo.textContent = file.name + ' | ' + formatSize(file.size) + ' | ' + detectFormat(currentFile.bytes);
+  refreshCurrentTab();
+}
+
+function refreshCurrentTab() {
+  if (!currentFile) return;
+  switch(currentTab) {
+    case 'inspector': renderInspector(); break;
+    case 'hex': initHexViewer(); break;
+    case 'disasm': /* lazy */ break;
+    case 'wasm': /* lazy */ break;
+    case 'peelf': renderPeElf(); break;
+    case 'convert': /* nothing */ break;
+    case 'hash': /* nothing */ break;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TABS
+// ═══════════════════════════════════════════════════════════════
+document.getElementById('nav').addEventListener('click', e => {
+  const item = e.target.closest('.nav-item');
+  if (!item) return;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  item.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  const tab = item.dataset.tab;
+  document.getElementById('tab-'+tab).classList.add('active');
+  currentTab = tab;
+  refreshCurrentTab();
+});
+
+// ═══════════════════════════════════════════════════════════════
+// FILE INSPECTOR
+// ═══════════════════════════════════════════════════════════════
+function renderInspector() {
+  const b = currentFile.bytes;
+  const fmt = detectFormat(b);
+  document.getElementById('insp-info').innerHTML =
+    '<table><tr><th>Имя</th><td>' + esc(currentFile.name) + '</td></tr>' +
+    '<tr><th>Размер</th><td>' + formatSize(currentFile.size) + '</td></tr>' +
+    '<tr><th>Формат</th><td>' + fmt + '</td></tr>' +
+    '<tr><th>Энтропия</th><td>' + shannonEntropy(b).toFixed(4) + ' bits/byte</td></tr></table>';
+
+  document.getElementById('insp-magic').innerHTML =
+    '<div class="mono">' + buf2hex(b.slice(0,16)) + '</div>' +
+    '<div class="mt-8">Определён как: <strong>' + fmt + '</strong></div>';
+
+  // Entropy graph
+  const canvas = document.getElementById('entropy-canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0,0,rect.width,rect.height);
+  const blocks = entropyBlocks(b, Math.max(256, Math.floor(b.length/200)));
+  const maxH = rect.height - 20;
+  const step = rect.width / blocks.length;
+  ctx.fillStyle = '#58a6ff';
+  for (let i=0;i<blocks.length;i++) {
+    const h = (blocks[i]/8) * maxH;
+    ctx.fillRect(i*step, rect.height - h - 10, Math.max(1, step-1), h);
+  }
+  ctx.fillStyle = '#8b949e';
+  ctx.font = '10px JetBrains Mono';
+  ctx.fillText('0', 2, rect.height-2);
+  ctx.fillText('8', 2, 12);
+  document.getElementById('insp-entropy').textContent = 'Средняя энтропия: ' + shannonEntropy(b).toFixed(4) + ' bits/byte (макс 8.0)';
+
+  // Strings
+  const strings = extractStrings(b, 4);
+  const filter = document.getElementById('str-filter').value.toLowerCase();
+  const lines = strings.filter(s=>!filter || s.str.toLowerCase().includes(filter)).map(s =>
+    '<span class="addr">0x' + s.offset.toString(16).padStart(8,'0') + '</span>  <span class="str">' + esc(s.str) + '</span>'
+  ).join('\n');
+  document.getElementById('insp-strings').innerHTML = lines || 'Строки не найдены';
+
+  // Hex preview
+  document.getElementById('insp-hex').textContent = hexDump(b.slice(0,256), 0);
+}
+document.getElementById('str-filter').addEventListener('input', () => { if(currentFile) renderInspector(); });
+
+function hexDump(bytes, base) {
+  let out = '';
+  for (let i=0;i<bytes.length;i+=16) {
+    const chunk = bytes.slice(i,i+16);
+    out += (base+i).toString(16).padStart(8,'0') + '  ';
+    out += Array.from(chunk).map(b=>b.toString(16).padStart(2,'0')).join(' ').padEnd(48,' ') + '  ';
+    out += Array.from(chunk).map(b=> (b>=32&&b<127)?String.fromCharCode(b):'.').join('') + '\n';
+  }
+  return out;
+}
+function esc(s) {
+  let r = '';
+  for (let i=0;i<s.length;i++) {
+    const c = s[i];
+    if (c==='&') r+='\x26\x61\x6d\x70\x3b';
+    else if (c==='<') r+='\x26\x6c\x74\x3b';
+    else if (c==='>') r+='\x26\x67\x74\x3b';
+    else if (c==='"') r+='\x26\x71\x75\x6f\x74\x3b';
+    else if (c==="'") r+='\x26\x23\x33\x39\x3b';
+    else r+=c;
+  }
+  return r;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HEX VIEWER (Virtual Scroll)
+// ═══════════════════════════════════════════════════════════════
+let hexRowHeight = 22;
+let hexVisibleRows = 0;
+let hexSelectedOffset = -1;
+let hexSearchMatches = [];
+let hexSearchIndex = 0;
+
+function initHexViewer() {
+  const container = document.getElementById('hex-container');
+  const viewport = document.getElementById('hex-viewport');
+  if (!currentFile) { viewport.innerHTML = ''; return; }
+  const totalRows = Math.ceil(currentFile.bytes.length / 16);
+  hexVisibleRows = Math.ceil(container.clientHeight / hexRowHeight) + 4;
+  viewport.style.height = (totalRows * hexRowHeight) + 'px';
+  renderHexViewport();
+  container.onscroll = renderHexViewport;
+}
+
+function renderHexViewport() {
+  const container = document.getElementById('hex-container');
+  const viewport = document.getElementById('hex-viewport');
+  if (!currentFile) return;
+  const totalRows = Math.ceil(currentFile.bytes.length / 16);
+  const scrollTop = container.scrollTop;
+  const startRow = Math.max(0, Math.floor(scrollTop / hexRowHeight) - 2);
+  const endRow = Math.min(totalRows, startRow + hexVisibleRows + 4);
+  let html = '';
+  for (let r=startRow; r<endRow; r++) {
+    const off = r*16;
+    const chunk = currentFile.bytes.slice(off, off+16);
+    let hexPart = '';
+    let asciiPart = '';
+    for (let i=0;i<16;i++) {
+      if (i < chunk.length) {
+        const cls = (off+i === hexSelectedOffset) ? 'byte selected' : 'byte';
+        hexPart += '<span class="' + cls + '" onclick="hexSelect(' + (off+i) + ')">' + chunk[i].toString(16).padStart(2,'0') + '</span> ';
+        asciiPart += (chunk[i]>=32&&chunk[i]<127)?String.fromCharCode(chunk[i]):'.';
+      } else {
+        hexPart += '   ';
+        asciiPart += ' ';
+      }
+    }
+    html += '<div class="hex-row" style="position:absolute;top:' + (r*hexRowHeight) + 'px">' +
+      '<span class="offset">' + off.toString(16).padStart(8,'0') + '</span>' +
+      '<span class="bytes">' + hexPart + '</span>' +
+      '<span class="ascii">' + esc(asciiPart) + '</span>' +
+    '</div>';
+  }
+  viewport.innerHTML = html;
+}
+
+function hexSelect(offset) {
+  hexSelectedOffset = offset;
+  const b = currentFile.bytes[offset];
+  document.getElementById('hex-detail').innerHTML =
+    '<strong>Offset:</strong> 0x' + offset.toString(16).padStart(8,'0') + ' (' + offset + ')<br>' +
+    '<strong>Hex:</strong> 0x' + b.toString(16).padStart(2,'0') + '<br>' +
+    '<strong>Dec:</strong> ' + b + '<br>' +
+    '<strong>Oct:</strong> 0' + b.toString(8) + '<br>' +
+    '<strong>Bin:</strong> 0b' + b.toString(2).padStart(8,'0') + '<br>' +
+    '<strong>ASCII:</strong> ' + ((b>=32&&b<127)?String.fromCharCode(b):'N/A');
+  renderHexViewport();
+}
+
+function hexSearch() {
+  if (!currentFile) return;
+  const pat = document.getElementById('hex-search').value.trim();
+  if (!pat) return;
+  const bytes = hex2bytes(pat);
+  if (bytes.length === 0) return;
+  const b = currentFile.bytes;
+  hexSearchMatches = [];
+  for (let i=0;i<=b.length-bytes.length;i++) {
+    let match = true;
+    for (let j=0;j<bytes.length;j++) if (b[i+j] !== bytes[j]) { match=false; break; }
+    if (match) hexSearchMatches.push(i);
+  }
+  hexSearchIndex = 0;
+  if (hexSearchMatches.length) {
+    hexGoto(hexSearchMatches[0]);
+    showToast('Найдено ' + hexSearchMatches.length + ' совпадений');
+  } else {
+    showToast('Совпадений не найдено');
+  }
+}
+function hexSearchNext() {
+  if (!hexSearchMatches.length) return;
+  hexSearchIndex = (hexSearchIndex + 1) % hexSearchMatches.length;
+  hexGoto(hexSearchMatches[hexSearchIndex]);
+}
+function hexGoto(offset) {
+  const container = document.getElementById('hex-container');
+  const row = Math.floor(offset / 16);
+  container.scrollTop = row * hexRowHeight - container.clientHeight/2;
+  hexSelect(offset);
+}
+function showToast(msg) {
+  const el = document.createElement('div');
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#21262d;border:1px solid #30363d;padding:8px 16px;border-radius:4px;z-index:200;color:#c9d1d9;font-family:JetBrains Mono;font-size:12px;';
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2500);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DISASSEMBLER (Capstone.js lazy)
+// ═══════════════════════════════════════════════════════════════
+async function ensureCapstone() {
+  if (capstoneLoaded) return true;
+  document.getElementById('disasm-loading').classList.remove('hidden');
+  try {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/gh/AlexAltea/capstone.js@master/src/capstone.min.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    // Wait for module init
+    if (window.capstone && window.capstone.MCapstone) {
+      await window.capstone.MCapstone;
+    } else if (window.cs && window.cs.MCapstone) {
+      await window.cs.MCapstone;
+    }
+    capstoneLoaded = true;
+    return true;
+  } catch(e) {
+    console.error('Capstone load failed', e);
+    return false;
+  } finally {
+    document.getElementById('disasm-loading').classList.add('hidden');
+  }
+}
+
+function getCapstoneArchMode(val) {
+  const c = window.capstone || window.cs;
+  if (!c) return null;
+  switch(val) {
+    case 'x86-64': return [c.ARCH_X86, c.MODE_64];
+    case 'x86-32': return [c.ARCH_X86, c.MODE_32];
+    case 'x86-16': return [c.ARCH_X86, c.MODE_16];
+    case 'arm': return [c.ARCH_ARM, c.MODE_ARM];
+    case 'thumb': return [c.ARCH_ARM, c.MODE_THUMB];
+    case 'arm64': return [c.ARCH_ARM64, c.MODE_LITTLE_ENDIAN];
+    case 'mips': return [c.ARCH_MIPS, c.MODE_MIPS32];
+    default: return [c.ARCH_X86, c.MODE_64];
+  }
+}
+
+async function runDisasm() {
+  if (!currentFile) { showToast('Сначала загрузите файл'); return; }
+  const ok = await ensureCapstone();
+  if (!ok) { showToast('Не удалось загрузить Capstone.js'); return; }
+  const c = window.capstone || window.cs;
+  const [arch, mode] = getCapstoneArchMode(document.getElementById('dis-arch').value);
+  const baseAddr = parseInt(document.getElementById('dis-addr').value, 0) || 0x1000;
+  const count = parseInt(document.getElementById('dis-count').value, 10) || 500;
+  const data = currentFile.bytes.slice(0, Math.min(currentFile.bytes.length, count*16 + 4096));
+
+  let out = '';
+  try {
+    const cs = new c.Cs(arch, mode);
+    const instructions = cs.disasm(data, baseAddr);
+    for (const ins of instructions) {
+      const mn = ins.mnemonic;
+      let cls = '';
+      if (/^(jmp|call|je|jne|ja|jb|jg|jl|jo|jp|js|jn|loop)/.test(mn)) cls = 'asm-jmp';
+      else if (/^mov/.test(mn)) cls = 'asm-mov';
+      else if (/^push/.test(mn)) cls = 'asm-push';
+      else if (/^pop/.test(mn)) cls = 'asm-pop';
+      else if (/^ret/.test(mn)) cls = 'asm-ret';
+      else if (/^call/.test(mn)) cls = 'asm-call';
+      const bytesStr = Array.from(ins.bytes).map(b=>b.toString(16).padStart(2,'0')).join(' ');
+      out += '<span class="asm-addr">' + ins.address.toString(16).padStart(8,'0') + '</span>  <span class="asm-bytes">' + bytesStr.padEnd(24,' ') + '</span>  <span class="' + cls + ' asm-mnem">' + esc(ins.mnemonic) + '</span>  <span class="' + cls + '">' + esc(ins.op_str) + '</span>\n';
+    }
+    cs.close();
+  } catch(e) {
+    out = 'Ошибка дизассемблирования: ' + e.message;
+  }
+  document.getElementById('disasm-output').innerHTML = out || 'Инструкции не найдены';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// WASM TOOLS (wabt.js lazy)
+// ═══════════════════════════════════════════════════════════════
+async function ensureWabt() {
+  if (wabtLoaded) return true;
+  document.getElementById('wasm-loading').classList.remove('hidden');
+  try {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/wabt@1.0.39/index.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    // WabtModule is global after script load
+    wabtInstance = await window.WabtModule();
+    wabtLoaded = true;
+    return true;
+  } catch(e) {
+    console.error('wabt load failed', e);
+    return false;
+  } finally {
+    document.getElementById('wasm-loading').classList.add('hidden');
+  }
+}
+
+async function runWasm() {
+  if (!currentFile) { showToast('Сначала загрузите файл'); return; }
+  const ok = await ensureWabt();
+  if (!ok) { showToast('Не удалось загрузить wabt.js'); return; }
+  const mode = document.getElementById('wasm-mode').value;
+  const bytes = currentFile.bytes;
+  if (detectFormat(bytes) !== 'WASM') {
+    showToast('Файл не похож на WASM');
+  }
+  let out = '';
+  try {
+    const module = wabtInstance.readWasm(bytes, {readDebugNames: true});
+    module.applyNames();
+    if (mode === 'wat') {
+      out = module.toText({foldExprs: false, inlineExport: true});
+    } else if (mode === 'decomp') {
+      out = module.decompile();
+    } else {
+      // metadata
+      const sections = [];
+      // Simple manual parse for sections info
+      let idx = 8; // skip magic + version
+      while (idx < bytes.length) {
+        const id = bytes[idx++];
+        let len = 0;
+        let shift = 0;
+        while (true) {
+          const b = bytes[idx++];
+          len |= (b & 0x7f) << shift;
+          shift += 7;
+          if ((b & 0x80) === 0) break;
+        }
+        const name = ['Custom','Type','Import','Function','Table','Memory','Global','Export','Start','Element','Code','Data','DataCount'][id] || 'Unknown(' + id + ')';
+        sections.push({name: name, offset: idx, size: len});
+        idx += len;
+      }
+      out = 'Sections:\n' + sections.map(s => '  ' + s.name.padEnd(12) + ' offset=0x' + s.offset.toString(16) + ' size=' + s.size).join('\n');
+    }
+    wasmResultText = out;
+  } catch(e) {
+    out = 'Ошибка обработки WASM: ' + e.message;
+  }
+  document.getElementById('wasm-output').innerHTML = esc(out).replace(/\n/g,'<br>');
+}
+
+function downloadWasmResult() {
+  if (!wasmResultText) { showToast('Нет результата для скачивания'); return; }
+  const blob = new Blob([wasmResultText], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (currentFile ? currentFile.name : 'output') + '.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PE / ELF ANALYZER
+// ═══════════════════════════════════════════════════════════════
+async function renderPeElf() {
+  if (!currentFile) { document.getElementById('peelf-output').textContent = 'Загрузите файл'; return; }
+  document.getElementById('peelf-loading').classList.remove('hidden');
+  const b = currentFile.bytes;
+  const fmt = detectFormat(b);
+  let html = '';
+
+  if (fmt === 'PE/EXE') {
+    html = await analyzePE(b);
+  } else if (fmt === 'ELF') {
+    html = analyzeELF(b);
+  } else {
+    html = '<div class="err">Формат ' + fmt + ' не поддерживается в этом инструменте (только PE и ELF)</div>';
+  }
+  document.getElementById('peelf-output').innerHTML = html;
+  document.getElementById('peelf-loading').classList.add('hidden');
+}
+
+async function analyzePE(bytes) {
+  // Load pe-exe-parser
+  if (!window.PE) {
+    try {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/pe-exe-parser@0.1.8/dist/pe-exe-parser.min.js';
+        s.onload = resolve;
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
+    } catch(e) { return 'Ошибка загрузки PE парсера: ' + e.message; }
+  }
+  try {
+    const pe = new window.PE.Parser(bytes.buffer);
+    let html = '<div class="card"><h4>DOS Header</h4><table>';
+    const dos = pe.getDosHeader();
+    for (const [k,v] of Object.entries(dos)) html += '<tr><th>' + esc(k) + '</th><td>' + v + '</td></tr>';
+    html += '</table></div>';
+
+    html += '<div class="card"><h4>PE / COFF Header</h4><table>';
+    const coff = pe.getCoffHeader();
+    for (const [k,v] of Object.entries(coff)) html += '<tr><th>' + esc(k) + '</th><td>' + v + '</td></tr>';
+    html += '</table></div>';
+
+    html += '<div class="card"><h4>Optional Header</h4><table>';
+    const opt = pe.getOptionalHeader();
+    for (const [k,v] of Object.entries(opt)) html += '<tr><th>' + esc(k) + '</th><td>' + v + '</td></tr>';
+    html += '</table></div>';
+
+    html += '<div class="card"><h4>Секции</h4><table><tr><th>Имя</th><th>Вирт. адрес</th><th>Вирт. размер</th><th>Raw адрес</th><th>Raw размер</th><th>Характеристики</th></tr>';
+    const secs = pe.getSections();
+    for (const s of secs) {
+      html += '<tr><td>' + esc(s.name) + '</td><td>0x' + s.virtualAddress.toString(16) + '</td><td>' + s.virtualSize + '</td><td>0x' + s.rawAddress.toString(16) + '</td><td>' + s.rawSize + '</td><td>0x' + s.characteristics.toString(16) + '</td></tr>';
+    }
+    html += '</table></div>';
+
+    html += '<div class="card"><h4>Импорты</h4><table><tr><th>Библиотека</th><th>Функция</th><th>Hint</th></tr>';
+    const imports = pe.getImports();
+    for (const imp of imports) {
+      for (const f of imp.functions) {
+        html += '<tr><td>' + esc(imp.dllName) + '</td><td>' + esc(f.name || String(f.ordinal)) + '</td><td>' + (f.hint || '-') + '</td></tr>';
+      }
+    }
+    html += '</table></div>';
+
+    html += '<div class="card"><h4>Экспорты</h4><table><tr><th>Имя</th><th>Ординал</th><th>RVA</th></tr>';
+    const exports = pe.getExports ? pe.getExports() : [];
+    for (const e of exports) {
+      html += '<tr><td>' + esc(e.name || '-') + '</td><td>' + e.ordinal + '</td><td>0x' + e.rva.toString(16) + '</td></tr>';
+    }
+    html += '</table></div>';
+    return html;
+  } catch(e) {
+    return 'Ошибка парсинга PE: ' + e.message;
+  }
+}
+
+function analyzeELF(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const is64 = bytes[4] === 2;
+  const isLE = bytes[5] === 1;
+  const read = {
+    half: function(o) { return isLE ? dv.getUint16(o,true) : dv.getUint16(o,false); },
+    word: function(o) { return isLE ? dv.getUint32(o,true) : dv.getUint32(o,false); },
+    xword: function(o) { return is64 ? (isLE ? dv.getBigUint64(o,true) : dv.getBigUint64(o,false)) : BigInt(read.word(o)); },
+    addr: function(o) { return is64 ? (isLE ? dv.getBigUint64(o,true) : dv.getBigUint64(o,false)) : BigInt(read.word(o)); },
+    off: function(o) { return is64 ? (isLE ? dv.getBigUint64(o,true) : dv.getBigUint64(o,false)) : BigInt(read.word(o)); },
+  };
+  let html = '<div class="card"><h4>ELF Header</h4><table>';
+  html += '<tr><th>Class</th><td>' + (is64?'64-bit':'32-bit') + '</td></tr>';
+  html += '<tr><th>Data</th><td>' + (isLE?'Little Endian':'Big Endian') + '</td></tr>';
+  html += '<tr><th>Version</th><td>' + bytes[6] + '</td></tr>';
+  html += '<tr><th>OS/ABI</th><td>' + bytes[7] + '</td></tr>';
+  html += '<tr><th>Type</th><td>0x' + read.half(16).toString(16) + '</td></tr>';
+  html += '<tr><th>Machine</th><td>0x' + read.half(18).toString(16) + '</td></tr>';
+  html += '<tr><th>Version</th><td>0x' + read.word(20).toString(16) + '</td></tr>';
+  html += '<tr><th>Entry</th><td>0x' + read.addr(24).toString(16) + '</td></tr>';
+  html += '<tr><th>Phoff</th><td>0x' + read.off(is64?32:28).toString(16) + '</td></tr>';
+  html += '<tr><th>Shoff</th><td>0x' + read.off(is64?40:32).toString(16) + '</td></tr>';
+  html += '<tr><th>Flags</th><td>0x' + read.word(is64?48:36).toString(16) + '</td></tr>';
+  html += '<tr><th>Ehsize</th><td>' + read.half(is64?52:40) + '</td></tr>';
+  html += '<tr><th>Phentsize</th><td>' + read.half(is64?54:42) + '</td></tr>';
+  html += '<tr><th>Phnum</th><td>' + read.half(is64?56:44) + '</td></tr>';
+  html += '<tr><th>Shentsize</th><td>' + read.half(is64?58:46) + '</td></tr>';
+  html += '<tr><th>Shnum</th><td>' + read.half(is64?60:48) + '</td></tr>';
+  html += '<tr><th>Shstrndx</th><td>' + read.half(is64?62:50) + '</td></tr>';
+  html += '</table></div>';
+
+  // Program headers
+  const phoff = Number(read.off(is64?40:28));
+  const phnum = read.half(is64?56:44);
+  const phentsize = read.half(is64?54:42);
+  if (phoff && phnum) {
+    html += '<div class="card"><h4>Program Headers</h4><table><tr><th>Type</th><th>Offset</th><th>Vaddr</th><th>Paddr</th><th>Filesz</th><th>Memsz</th><th>Flags</th><th>Align</th></tr>';
+    for (let i=0;i<phnum;i++) {
+      const o = phoff + i*phentsize;
+      const type = read.word(o);
+      const off = read.off(is64?o+8:o+4);
+      const vaddr = read.addr(is64?o+16:o+8);
+      const paddr = read.addr(is64?o+24:o+12);
+      const filesz = read.xword(is64?o+32:o+16);
+      const memsz = read.xword(is64?o+40:o+20);
+      const flags = read.word(is64?o+4:o+24);
+      const align = read.xword(is64?o+48:o+28);
+      const tname = {1:'LOAD',2:'DYNAMIC',3:'INTERP',4:'NOTE',5:'SHLIB',6:'PHDR',7:'TLS'}[type] || type;
+      html += '<tr><td>' + tname + '</td><td>0x' + off.toString(16) + '</td><td>0x' + vaddr.toString(16) + '</td><td>0x' + paddr.toString(16) + '</td><td>' + filesz + '</td><td>' + memsz + '</td><td>0x' + flags.toString(16) + '</td><td>0x' + align.toString(16) + '</td></tr>';
+    }
+    html += '</table></div>';
+  }
+
+  // Section headers
+  const shoff = Number(read.off(is64?40:32));
+  const shnum = read.half(is64?60:48);
+  const shentsize = read.half(is64?58:46);
+  const shstrndx = read.half(is64?62:50);
+  if (shoff && shnum) {
+    // read string table
+    const stroff = Number(read.off(shoff + shstrndx*shentsize + (is64?24:16)));
+    const straddr = Number(read.addr(shoff + shstrndx*shentsize + (is64?16:12)));
+    const strsz = Number(read.xword(shoff + shstrndx*shentsize + (is64?32:20)));
+    const getStr = function(idx) {
+      let s = '';
+      for (let i=idx; i<strsz+stroff && bytes[i]; i++) s += String.fromCharCode(bytes[i]);
+      return s;
+    };
+    html += '<div class="card"><h4>Section Headers</h4><table><tr><th>Name</th><th>Type</th><th>Addr</th><th>Offset</th><th>Size</th><th>Flags</th></tr>';
+    for (let i=0;i<shnum;i++) {
+      const o = shoff + i*shentsize;
+      const nameIdx = read.word(o);
+      const name = getStr(stroff + nameIdx);
+      const type = read.word(o+4);
+      const addr = read.addr(is64?o+16:o+12);
+      const off = read.off(is64?o+24:o+16);
+      const size = read.xword(is64?o+32:o+20);
+      const flags = Number(read.xword(is64?o+8:o+8));
+      const tname = {0:'NULL',1:'PROGBITS',2:'SYMTAB',3:'STRTAB',4:'RELA',5:'HASH',6:'DYNAMIC',7:'NOTE',8:'NOBITS',9:'REL',10:'SHLIB',11:'DYNSYM',14:'INIT_ARRAY',15:'FINI_ARRAY',16:'PREINIT_ARRAY',17:'GROUP',18:'SYMTAB_SHNDX'}[type] || type;
+      html += '<tr><td>' + esc(name) + '</td><td>' + tname + '</td><td>0x' + addr.toString(16) + '</td><td>0x' + off.toString(16) + '</td><td>' + size + '</td><td>0x' + flags.toString(16) + '</td></tr>';
+    }
+    html += '</table></div>';
+  }
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CONVERTER
+// ═══════════════════════════════════════════════════════════════
+function convertFile() {
+  if (!currentFile) { showToast('Сначала загрузите файл'); return; }
+  const mode = document.getElementById('conv-file-mode').value;
+  const b = currentFile.bytes;
+  let out = '';
+  switch(mode) {
+    case 'base64': {
+      let bin = '';
+      for (let i = 0; i < b.length; i++) bin += String.fromCharCode(b[i]);
+      out = btoa(bin);
+      break;
+    }
+    case 'hex':
+      out = buf2hex(b, '');
+      break;
+    case 'c': {
+      let arr = 'unsigned char data[] = {\n  ';
+      for (let i=0;i<b.length;i++) {
+        arr += '0x' + b[i].toString(16).padStart(2,'0') + ((i%16===15 && i<b.length-1)?',\n  ':',');
+      }
+      out = arr.replace(/,\n  $/, '\n').replace(/,$/, '') + '\n};\nunsigned int data_len = ' + b.length + ';';
+      break;
+    }
+    case 'py': {
+      let arr = 'data = bytes([\n  ';
+      for (let i=0;i<b.length;i++) {
+        arr += b[i] + ((i%16===15 && i<b.length-1)?',\n  ':',');
+      }
+      out = arr.replace(/,\n  $/, '\n').replace(/,$/, '') + '\n])';
+      break;
+    }
+    case 'js': {
+      let arr = 'const data = new Uint8Array([\n  ';
+      for (let i=0;i<b.length;i++) {
+        arr += '0x' + b[i].toString(16).padStart(2,'0') + ((i%16===15 && i<b.length-1)?',\n  ':',');
+      }
+      out = arr.replace(/,\n  $/, '\n').replace(/,$/, '') + '\n]);';
+      break;
+    }
+    case 'rust': {
+      let arr = 'let data: Vec<u8> = vec![\n  ';
+      for (let i=0;i<b.length;i++) {
+        arr += '0x' + b[i].toString(16).padStart(2,'0') + ((i%16===15 && i<b.length-1)?',\n  ':',');
+      }
+      out = arr.replace(/,\n  $/, '\n').replace(/,$/, '') + '\n];';
+      break;
+    }
+  }
+  convertedText = out;
+  document.getElementById('conv-file-out').value = out;
+}
+
+function downloadConverted() {
+  if (!convertedText) { showToast('Нет результата'); return; }
+  const blob = new Blob([convertedText], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (currentFile ? currentFile.name : 'output') + '.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function base64ToFile() {
+  const txt = document.getElementById('conv-b64-in').value.trim();
+  try {
+    const str = atob(txt);
+    const bytes = new Uint8Array(str.length);
+    for (let i=0;i<str.length;i++) bytes[i] = str.charCodeAt(i);
+    const blob = new Blob([bytes]);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'decoded.bin';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch(e) { showToast('Ошибка Base64: ' + e.message); }
+}
+
+function numConvert(src) {
+  const bits = parseInt(document.getElementById('num-bits').value);
+  const endian = document.getElementById('num-endian').value;
+  const sign = document.getElementById('num-sign').value;
+  const max = BigInt(1) << BigInt(bits);
+  const mask = max - BigInt(1);
+  let val = BigInt(0);
+  try {
+    const v = document.getElementById('num-'+src).value.trim().replace(/^0x|^0b|^0o/,'');
+    if (!v) return;
+    if (src==='dec') val = BigInt(v);
+    else if (src==='hex') val = BigInt('0x'+v);
+    else if (src==='oct') val = BigInt('0o'+v);
+    else if (src==='bin') val = BigInt('0b'+v);
+  } catch(e) { return; }
+  if (sign==='signed') {
+    const half = BigInt(1) << BigInt(bits-1);
+    if (val >= half) val = val - max;
+  }
+  const dec = val.toString(10);
+  const hex = (val & mask).toString(16).padStart(bits/4,'0');
+  const oct = (val & mask).toString(8).padStart(Math.ceil(bits/3),'0');
+  const bin = (val & mask).toString(2).padStart(bits,'0');
+  if (src!=='dec') document.getElementById('num-dec').value = dec;
+  if (src!=='hex') document.getElementById('num-hex').value = hex;
+  if (src!=='oct') document.getElementById('num-oct').value = oct;
+  if (src!=='bin') document.getElementById('num-bin').value = bin;
+}
+
+function strConvert() {
+  const from = document.getElementById('str-from').value;
+  const to = document.getElementById('str-to').value;
+  const input = document.getElementById('str-in').value;
+  let bytes;
+  try {
+    if (from === 'utf8') bytes = new TextEncoder().encode(input);
+    else if (from === 'utf16') {
+      bytes = new Uint8Array(input.length*2);
+      for (let i=0;i<input.length;i++) {
+        const c = input.charCodeAt(i);
+        bytes[i*2] = c & 0xff;
+        bytes[i*2+1] = c >> 8;
+      }
+    } else {
+      bytes = new Uint8Array(input.length);
+      for (let i=0;i<input.length;i++) bytes[i] = input.charCodeAt(i) & 0xff;
+    }
+    let out = '';
+    if (to === 'utf8') out = new TextDecoder('utf-8').decode(bytes);
+    else if (to === 'utf16') {
+      const arr = new Uint16Array(bytes.buffer);
+      out = String.fromCharCode.apply(null, arr);
+    } else {
+      out = String.fromCharCode.apply(null, bytes);
+    }
+    document.getElementById('str-out').value = out;
+  } catch(e) { document.getElementById('str-out').value = 'Ошибка: '+e.message; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// HASH & COMPRESS
+// ═══════════════════════════════════════════════════════════════
+async function calcHashes() {
+  if (!currentFile) { showToast('Сначала загрузите файл'); return; }
+  const b = currentFile.bytes;
+  const subtle = window.crypto.subtle;
+  let html = '';
+  try {
+    const sha1 = await subtle.digest('SHA-1', b);
+    html += '<div><strong>SHA-1:</strong> <span class="mono">' + buf2hex(new Uint8Array(sha1),'') + '</span></div>';
+  } catch(e) { html += '<div class="err">SHA-1: ' + e.message + '</div>'; }
+  try {
+    const sha256 = await subtle.digest('SHA-256', b);
+    html += '<div><strong>SHA-256:</strong> <span class="mono">' + buf2hex(new Uint8Array(sha256),'') + '</span></div>';
+  } catch(e) { html += '<div class="err">SHA-256: ' + e.message + '</div>'; }
+  try {
+    const sha512 = await subtle.digest('SHA-512', b);
+    html += '<div><strong>SHA-512:</strong> <span class="mono">' + buf2hex(new Uint8Array(sha512),'') + '</span></div>';
+  } catch(e) { html += '<div class="err">SHA-512: ' + e.message + '</div>'; }
+  html += '<div><strong>MD5:</strong> <span class="mono">' + md5(b) + '</span></div>';
+  document.getElementById('hash-results').innerHTML = html;
+}
+
+// MD5 implementation
+function md5(bytes) {
+  const k = new Uint32Array([
+    0xd76aa478,0xe8c7b756,0x242070db,0xc1bdceee,0xf57c0faf,0x4787c62a,0xa8304613,0xfd469501,
+    0x698098d8,0x8b44f7af,0xffff5bb1,0x895cd7be,0x6b901122,0xfd987193,0xa679438e,0x49b40821,
+    0xf61e2562,0xc040b340,0x265e5a51,0xe9b6c7aa,0xd62f105d,0x02441453,0xd8a1e681,0xe7d3fbc8,
+    0x21e1cde6,0xc33707d6,0xf4d50d87,0x455a14ed,0xa9e3e905,0xfcefa3f8,0x676f02d9,0x8d2a4c8a,
+    0xfffa3942,0x8771f681,0x6d9d6122,0xfde5380c,0xa4beea44,0x4bdecfa9,0xf6bb4b60,0xbebfbc70,
+    0x289b7ec6,0xeaa127fa,0xd4ef3085,0x04881d05,0xd9d4d039,0xe6db99e5,0x1fa27cf8,0xc4ac5665,
+    0xf4292244,0x432aff97,0xab9423a7,0xfc93a039,0x655b59c3,0x8f0ccc92,0xffeff47d,0x85845dd1,
+    0x6fa87e4f,0xfe2ce6e0,0xa3014314,0x4e0811a1,0xf7537e82,0xbd3af235,0x2ad7d2bb,0xeb86d391
+  ]);
+  const r = [7,12,17,22,7,12,17,22,7,12,17,22,7,12,17,22,5,9,14,20,5,9,14,20,5,9,14,20,5,9,14,20,4,11,16,23,4,11,16,23,4,11,16,23,4,11,16,23,6,10,15,21,6,10,15,21,6,10,15,21,6,10,15,21];
+  let h0=0x67452301,h1=0xefcdab89,h2=0x98badcfe,h3=0x10325476;
+  const len = bytes.length;
+  const totalBits = BigInt(len)*BigInt(8);
+  const padLen = (len%64<56)?(56-len%64):(120-len%64);
+  const msg = new Uint8Array(len+padLen+8);
+  msg.set(bytes);
+  msg[len]=0x80;
+  for (let i=0;i<8;i++) msg[msg.length-8+i] = Number((totalBits >> BigInt(i*8)) & BigInt(0xff));
+  const w = new Uint32Array(16);
+  for (let off=0;off<msg.length;off+=64) {
+    for (let i=0;i<16;i++) w[i] = msg[off+i*4] | (msg[off+i*4+1]<<8) | (msg[off+i*4+2]<<16) | (msg[off+i*4+3]<<24);
+    let a=h0,b=h1,c=h2,d=h3;
+    for (let i=0;i<64;i++) {
+      let f,g;
+      if (i<16) { f=(b&c)|((~b)&d); g=i; }
+      else if (i<32) { f=(d&b)|((~d)&c); g=(5*i+1)%16; }
+      else if (i<48) { f=b^c^d; g=(3*i+5)%16; }
+      else { f=c^(b|(~d)); g=(7*i)%16; }
+      const temp = d;
+      d=c; c=b;
+      b = b + leftRotate(a+f+k[i]+w[g], r[i]);
+      a=temp;
+    }
+    h0+=a; h1+=b; h2+=c; h3+=d;
+  }
+  function leftRotate(x,c) { return (x<<c)|(x>>>(32-c)); }
+  function toHex(n) { return (n>>>0).toString(16).padStart(8,'0'); }
+  return toHex(h0)+toHex(h1)+toHex(h2)+toHex(h3);
+}
+
+async function compressFile() {
+  if (!currentFile) { showToast('Сначала загрузите файл'); return; }
+  const fmt = document.getElementById('compress-format').value;
+  try {
+    const cs = new CompressionStream(fmt);
+    const writer = cs.writable.getWriter();
+    writer.write(currentFile.bytes);
+    writer.close();
+    const resp = new Response(cs.readable);
+    const buf = await resp.arrayBuffer();
+    const out = new Uint8Array(buf);
+    const ratio = (out.length/currentFile.size*100).toFixed(1);
+    window._lastCompressed = out;
+    window._lastCompressedName = currentFile.name + '.' + fmt;
+    document.getElementById('compress-results').innerHTML =
+      '<div><strong>Формат:</strong> ' + fmt + '</div>' +
+      '<div><strong>До:</strong> ' + formatSize(currentFile.size) + ' → <strong>После:</strong> ' + formatSize(out.length) + '</div>' +
+      '<div><strong>Коэффициент:</strong> ' + ratio + '% от оригинала</div>' +
+      '<div class="mt-8"><button class="btn primary" onclick="downloadBlob(window._lastCompressed, window._lastCompressedName)">⬇️ Скачать ' + fmt + '</button></div>';
+  } catch(e) { document.getElementById('compress-results').innerHTML = '<div class="err">Ошибка: ' + e.message + '</div>'; }
+}
+
+async function decompressFile() {
+  if (!currentFile) { showToast('Сначала загрузите файл'); return; }
+  const fmt = document.getElementById('compress-format').value;
+  try {
+    const ds = new DecompressionStream(fmt);
+    const writer = ds.writable.getWriter();
+    writer.write(currentFile.bytes);
+    writer.close();
+    const resp = new Response(ds.readable);
+    const buf = await resp.arrayBuffer();
+    const out = new Uint8Array(buf);
+    window._lastDecompressed = out;
+    document.getElementById('compress-results').innerHTML =
+      '<div><strong>Распаковано:</strong> ' + formatSize(out.length) + '</div>' +
+      '<div class="mt-8"><button class="btn primary" onclick="downloadBlob(window._lastDecompressed, \'decompressed.bin\')">⬇️ Скачать</button></div>';
+  } catch(e) { document.getElementById('compress-results').innerHTML = '<div class="err">Ошибка распаковки: ' + e.message + '</div>'; }
+}
+
+function downloadBlob(bytes, name) {
+  if (!bytes || !bytes.length) { showToast('Нет данных'); return; }
+  const blob = new Blob([bytes]);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AI AGENT
+// ═══════════════════════════════════════════════════════════════
+function toggleAiPanel() {
+  const panel = document.getElementById('ai-panel');
+  panel.classList.toggle('hidden');
+  panel.classList.toggle('visible');
+  document.getElementById('main').classList.toggle('ai-hidden');
+}
+
+function showApiKeyModal() {
+  document.getElementById('api-modal').style.display = 'flex';
+  document.getElementById('api-key-input').value = localStorage.getItem('fw_api_key') || '';
+}
+function closeApiModal() {
+  document.getElementById('api-modal').style.display = 'none';
+}
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  if (key) localStorage.setItem('fw_api_key', key);
+  closeApiModal();
+}
+
+// Show modal on first open if no key
+if (!localStorage.getItem('fw_api_key')) {
+  setTimeout(showApiKeyModal, 500);
+}
+
+function clearChat() {
+  chatHistory = [];
+  document.getElementById('ai-messages').innerHTML = '';
+}
+
+function getToolOutput() {
+  const panel = document.getElementById('tab-'+currentTab);
+  if (!panel) return '';
+  const boxes = panel.querySelectorAll('.output-box, #disasm-output, #wasm-output, #peelf-output, #insp-hex, #insp-strings, #insp-info, #hash-results, #compress-results, #conv-file-out');
+  let out = '';
+  for (const box of boxes) {
+    const txt = box.innerText || box.value || '';
+    if (txt.trim()) out += txt.slice(0,800) + '\n---\n';
+  }
+  return out.slice(0,2000);
+}
+
+function buildSystemPrompt() {
+  const b = currentFile ? currentFile.bytes : null;
+  const fmt = currentFile ? detectFormat(currentFile.bytes) : 'None';
+  const hexPreview = b ? buf2hex(b.slice(0,64),' ') : 'N/A';
+  const ent = b ? shannonEntropy(b).toFixed(4) : 'N/A';
+  const toolOut = getToolOutput();
+  const errs = _errors.slice(-10).map(e => '[' + new Date(e.t).toLocaleTimeString() + '] ' + e.msg).join('\n') || 'None';
+  return 'You are BinaryKit AI — expert reverse engineering assistant inside a binary analysis tool. You automatically receive the current analysis context.\n\n=== CONTEXT ===\nFile: ' + (currentFile ? currentFile.name : 'None') + ' | ' + (currentFile ? formatSize(currentFile.size) : '0 B') + ' | Format: ' + fmt + '\nEntropy: ' + ent + '\nFirst 64 bytes (hex): ' + hexPreview + '\nActive tool: ' + currentTab + '\n\nTool output (first 2000 chars):\n' + toolOut + '\n\nRecent errors:\n' + errs + '\n===============\n\nHelp the user understand the binary, explain assembly, identify suspicious patterns, suggest next steps. Be concise and technical. Use markdown.';
+}
+
+async function sendAiMessage() {
+  const input = document.getElementById('ai-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const key = localStorage.getItem('fw_api_key');
+  if (!key) { showApiKeyModal(); return; }
+
+  addMessage('user', text);
+  input.value = '';
+  chatHistory.push({role:'user', content:text});
+
+  const messages = [{role:'system', content: buildSystemPrompt()}, ...chatHistory];
+  const status = document.getElementById('ai-status');
+  status.textContent = '⏳ думает...';
+
+  try {
+    const resp = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + key,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'accounts/fireworks/models/deepseek-v4-pro',
+        max_tokens: 2048,
+        stream: true,
+        messages: messages
+      })
+    });
+    if (!resp.ok) throw new Error('HTTP '+resp.status);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let botMsg = '';
+    const botEl = addMessage('bot', '');
+    while (true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, {stream:true});
+      for (const line of chunk.split('\n')) {
+        const l = line.trim();
+        if (!l.startsWith('data:')) continue;
+        const data = l.slice(5).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const obj = JSON.parse(data);
+          const delta = obj.choices && obj.choices[0] && obj.choices[0].delta && obj.choices[0].delta.content || '';
+          botMsg += delta;
+          botEl.innerHTML = renderMarkdown(botMsg);
+          botEl.scrollIntoView({behavior:'smooth', block:'end'});
+        } catch(e) {}
+      }
+    }
+    chatHistory.push({role:'assistant', content: botMsg});
+    status.textContent = '';
+  } catch(e) {
+    status.textContent = '';
+    addMessage('bot', 'Ошибка: ' + e.message);
+  }
+}
+
+function addMessage(role, text) {
+  const container = document.getElementById('ai-messages');
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.innerHTML = '<div class="avatar">' + (role==='user'?'👤':'🤖') + '</div><div class="bubble">' + (role==='bot'?renderMarkdown(text):esc(text)) + '</div>';
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return div.querySelector('.bubble');
+}
+
+function renderMarkdown(text) {
+  // Simple markdown: bold, code, code blocks, lists
+  let html = esc(text);
+  // code blocks
+  html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  // inline code
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // bold
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  // lists
+  html = html.replace(/^\s*-\s+(.+)$/gm, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>');
+  // paragraphs
+  html = html.replace(/\n\n/g, '</p><p>');
+  html = '<p>' + html + '</p>';
+  // fix nested tags
+  html = html.replace(/<p><(ul|pre)/g, '<$1');
+  html = html.replace(/<\/(ul|pre)><\/p>/g, '</$1>');
+  return html;
+}
+
+function pasteToolOutput() {
+  const out = getToolOutput();
+  document.getElementById('ai-input').value += '\n\n[TOOL OUTPUT]\n' + out.slice(0,1500);
+}
+function pasteErrors() {
+  const errs = _errors.slice(-10).map(e => '[' + new Date(e.t).toLocaleTimeString() + '] ' + e.msg).join('\n') || 'Нет ошибок';
+  document.getElementById('ai-input').value += '\n\n[ERRORS]\n' + errs;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('resize', () => {
+  if (currentTab === 'hex') initHexViewer();
+});
+</script>
+</body>
+</html>
